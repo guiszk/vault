@@ -35,13 +35,6 @@ EOF
 exit 0
 }
 
-intro() {
-    echo "Welcome to $RUN!"
-    # read -r -s -p $'Enter a master password: ' PASS
-    # all e 'Enter a master password: '
-    #exit 0
-}
-
 fgpg() {
     # fgpg [d|e] [u|p|w|m]
     ################ D E C O D E ##############
@@ -125,8 +118,6 @@ check() {
 
 add() {
     all d 'Enter master password: '
-    # read -r -s -p $'Enter master password: ' PASS
-    # all d 'Enter master password: '
     local dom usr pw domname match
     if [[ $# -eq 0 ]]; then
         read -r -p "Enter domain: " dom
@@ -158,6 +149,7 @@ add() {
         echo "$usr" >> "$HERE"/.usr.lst
         echo "$dom" >> "$HERE"/.web.lst
         [[ $# -eq 2 ]] && pwgen -y -s $((10 + RANDOM % 20)) 1 >> "$HERE"/.pass.lst || echo "$pw" >> "$HERE"/.pass.lst
+        unset pw
         echo "$usr's $domname account added."
     fi
 }
@@ -250,11 +242,6 @@ edit() {
 #
 # FUNCTIONS END
 #
-
-#! [ -f "$HERE"/.usr.lst ] && touch "$HERE"/.usr.lst && intro
-#! [ -f "$HERE"/.pass.lst ] && touch "$HERE"/.pass.lst
-#! [ -f "$HERE"/.web.lst ] && touch "$HERE"/.web.lst
-#! [ -f "$HERE"/.wa.lst ] || [ -s "$HERE"/.wa.lst ] && pwgen -y -s $((5 + RANDOM % 7)) 3 | tr " " "\n" > "$HERE"/.wa.lst
 
 case "$1" in
     init) shift; init "$@";;
