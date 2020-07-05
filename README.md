@@ -6,6 +6,7 @@ Password manager written in BASH.
 
 ```sh
 $ vault.sh init
+    # Run when first start.
     # Delete all info, reset password and start from scratch.
 $ vault.sh add [domain] [user] [*password]
     # Add new credentials to a domain.
