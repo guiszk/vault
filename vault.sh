@@ -26,13 +26,18 @@ Usage:
     $RUN list [search|domain] [user]
         List all domains, search domains and users
         and show passwords.
-    $RUN edit [domain] [username] [password]
-        Edit password.
+    $RUN edit  *-d,--delete [domain] [username] [password]
+        Edit password, use -d to delete.
         Run with no options for interactive mode.
     $RUN -h, --help
         Show this text.
 EOF
 exit 0
+}
+
+trap_ctrlc() {
+    [[ -f .web.lst ]] && all e
+    exit 1
 }
 
 fgpg() {
@@ -61,6 +66,7 @@ fgpg() {
 }
 
 init() {
+    [[ "$(read -e -n 1 -r -p 'This will delete all credentials and reset the master password. Continue? [Y/n] '; echo $REPLY)" == [Yy]* ]] || die "Aborting."
     rm "$HERE"/.*.enc 2&>/dev/null
     read -r -s -p "Enter new password: " PASS && echo
     touch .{usr,pass,web,wa}.lst
@@ -90,6 +96,7 @@ dif() {
 
 domcheck() {
     local match
+    [[ -z "$1" ]] && return 1
     match=$(echo "$1" | grep -E -o "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b")
     #echo $match
     if [[ "$1" == "$match" ]]; then
@@ -118,13 +125,16 @@ check() {
 
 add() {
     all d 'Enter master password: '
+    trap "trap_ctrlc" 2
     local dom usr pw domname match
     if [[ $# -eq 0 ]]; then
         read -r -p "Enter domain: " dom
+
         domcheck "$dom" || die "Domain must fit [example.com/example.co.nz]"
         check "$dom"
         domname=$(echo "$dom" | cut -d "." -f 1)
         read -r -p "Enter username: " usr
+        [[ -z "$usr" ]] && die "Please enter a username."
         [[ $ret =~ $usr ]] && die "$usr's $domname account already exists."
         echo "$usr" >> "$HERE"/.usr.lst
         echo "$dom" >> "$HERE"/.web.lst
@@ -148,8 +158,12 @@ add() {
         [[ $ret =~ $usr ]] && die "$usr's $domname account already exists."
         echo "$usr" >> "$HERE"/.usr.lst
         echo "$dom" >> "$HERE"/.web.lst
-        [[ $# -eq 2 ]] && pwgen -y -s $((10 + RANDOM % 20)) 1 >> "$HERE"/.pass.lst || echo "$pw" >> "$HERE"/.pass.lst
-        unset pw
+        if [[ $# -eq 2 ]]; then
+            pw=$(pwgen -y -s $((10 + RANDOM % 20)) 1)
+            echo "$pw" | $clipb
+            echo "Password copied to clipboard."
+        fi
+        echo "$pw" >> "$HERE"/.pass.lst
         echo "$usr's $domname account added."
     fi
 }
@@ -205,39 +219,79 @@ list() {
 
 edit() {
     all d 'Enter master password: '
-    if [[ "$#" -eq 3 ]]; then
-        if grep -Fq "$1" "$HERE"/.web.lst; then
-            if grep -Fq "$2" "$HERE"/.usr.lst; then
-                check "$1" "$2"
-                gsed -i "${same[0]}s/.*/${3}/" "$HERE"/.pass.lst
-                echo "Password changed."
-                unset same
+    trap "trap_ctrlc" 2
+    case "$1" in
+        -d|--delete) shift;
+            if [[ "$#" -eq 2 ]]; then
+                if grep -Fq "$1" "$HERE"/.web.lst; then
+                    if grep -Fq "$2" "$HERE"/.usr.lst; then
+                        check "$1" "$2"
+                        gsed -i "${same[0]}d" "$HERE"/.{usr,pass,web}.lst
+                        echo "$2's $(echo $1 | cut -d . -f 1) account deleted."
+                        unset same
+                    else
+                        die "Username not found in this domain."
+                    fi
+                else
+                    die "Domain not found."
+                fi
+            elif [[ "$#" -eq 0 ]]; then
+                echo "Deleting account."
+                read -r -p "Enter domain: " dom
+                if grep -Fq "$dom" "$HERE"/.web.lst; then
+                    read -r -p "Enter username: " usr
+                    if grep -Fq "$usr" "$HERE"/.usr.lst; then
+                        check "$dom" "$usr"
+                        domname=$(grep -F "$dom" "$HERE"/.web.lst | cut -d . -f 1)
+                        echo "$usr's $domname account deleted."
+                        gsed -i "${same[0]}d" "$HERE"/.{usr,pass,web}.lst
+                        unset same
+                    else
+                        die "Username not found in this domain."
+                    fi
+                else
+                    die "Domain not found."
+                fi
             else
-                die "Username not found in this domain."
-            fi
-        else
-            die "Domain not found."
-        fi
-    elif [[ "$#" -eq 0 ]]; then
-        echo "Changing password."
-        read -r -p "Enter domain: " dom
-        if grep -Fq "$dom" "$HERE"/.web.lst; then
-            read -r -p "Enter username: " usr
-            if grep -Fq "$usr" "$HERE"/.usr.lst; then
-                check "$dom" "$usr"
-                read -r -s -p $'Enter new password: ' pw
-                gsed -i "${same[0]}s/.*/${pw}/" "$HERE"/.pass.lst
-                echo -e "\nPassword changed."
-                unset same
+                die "Usage: $RUN edit -d [domain] [username]"
+            fi;;
+        *)
+            if [[ "$#" -eq 3 ]]; then
+                if grep -Fq "$1" "$HERE"/.web.lst; then
+                    if grep -Fq "$2" "$HERE"/.usr.lst; then
+                        check "$1" "$2"
+                        gsed -i "${same[0]}s/.*/${3}/" "$HERE"/.pass.lst
+                        echo "Password changed."
+                        unset same
+                    else
+                        die "Username not found in this domain."
+                    fi
+                else
+                    die "Domain not found."
+                fi
+            elif [[ "$#" -eq 0 ]]; then
+                echo "Changing password."
+                read -r -p "Enter domain: " dom
+                [[ -z "$dom" ]] && die "Invalid domain."
+                if grep -Fq "$dom" "$HERE"/.web.lst; then
+                    read -r -p "Enter username: " usr
+                    [[ -z "$usr" ]] && die "Invalid username."
+                    if grep -Fq "$usr" "$HERE"/.usr.lst; then
+                        check "$dom" "$usr"
+                        read -r -s -p $'Enter new password: ' pw
+                        gsed -i "${same[0]}s/.*/${pw}/" "$HERE"/.pass.lst
+                        echo -e "\nPassword changed."
+                        unset same
+                    else
+                        die "Username not found in this domain."
+                    fi
+                else
+                    die "Domain not found."
+                fi
             else
-                die "Username not found in this domain."
-            fi
-        else
-            die "Domain not found."
-        fi
-    else
-        die "Usage: $RUN edit [domain] [username] [password]"
-    fi
+                die "Usage: $RUN edit [domain] [username] [password]"
+            fi;;
+    esac
 }
 #
 # FUNCTIONS END
