@@ -1,6 +1,6 @@
 # vault
 
-Password manager written in BASH.
+Poorly written BASH password manager.
 
 ## Usage
 

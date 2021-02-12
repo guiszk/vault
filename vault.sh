@@ -42,7 +42,7 @@ trap_ctrlc() {
 
 fgpg() {
     # fgpg [d|e] [u|p|w|m]
-    ################ D E C O D E ##############
+    # decode
     if [[ "$1" == "d" ]]; then
         case "$2" in
             u) shift; echo "$PASS$(sed '1q;d' $HERE/.wa.lst | rev)" | gpg --batch --passphrase-fd 0 --output "$HERE"/.usr.lst --decrypt "$HERE"/.usr.enc &>/dev/null && rm "$HERE"/.usr.enc || die "Wrong password.";;
@@ -51,7 +51,7 @@ fgpg() {
             m) shift; echo "$PASS" | gpg --batch --passphrase-fd 0 --output "$HERE"/.wa.lst --decrypt "$HERE"/.wa.enc &>/dev/null && rm "$HERE"/.wa.enc || die "Wrong password.";;
             *) die "Error";;
         esac
-    ################ E N C O D E ##############
+    # encode
     elif [[ "$1" == "e" ]]; then
         case "$2" in
             u) shift; echo "$PASS$(sed '1q;d' $HERE/.wa.lst | rev)" | gpg --batch --passphrase-fd 0 --output "$HERE"/.usr.enc --symmetric --no-symkey-cache --cipher-algo AES256 "$HERE"/.usr.lst &>/dev/null && rm "$HERE"/.usr.lst;;
@@ -97,7 +97,8 @@ dif() {
 domcheck() {
     local match
     [[ -z "$1" ]] && return 1
-    match=$(echo "$1" | grep -E -o "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b")
+    #match=$(echo "$1" | grep -E -o "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b")
+    match=$(echo "$1" | grep -E -o "(\.*[a-zA-Z0-9])+(\.[a-zA-Z]{1,4})+\b")
     #echo $match
     if [[ "$1" == "$match" ]]; then
         return 0
@@ -110,7 +111,8 @@ check() {
     # check [dom] [usr]
     #return usernames
     if [[ $# -lt 2 ]]; then
-        if echo "$1" | grep -E -q "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b"; then
+        #if echo "$1" | grep -E -q "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b"; then
+        if echo "$1" | grep -E -q "(\.*[a-zA-Z0-9])+(\.[a-zA-Z]{1,4})+\b"; then
             ret=$(for i in $(grep -nF "$1" "$HERE"/.web.lst | cut -d : -f 1 | tr '\n' ' '); do sed "${i}q;d" "$HERE"/.usr.lst; done)
         else
         #return domains
@@ -174,6 +176,7 @@ list() {
     normal=$(tput sgr0)
     [[ -s "$HERE"/.web.lst ]] || die "There is nothing saved. Run $RUN add to add new credentials."
     if [[ $# -eq 0 ]]; then
+        echo "Showing all $(wc -l "$HERE"/.usr.lst | grep -Eo '[0-9]{1,4}') accounts."
         while IFS= read -r dom; do
             echo "${bold}$dom${normal}"
             check "$dom"
@@ -209,6 +212,7 @@ list() {
         if grep -Fq "$1" "$HERE"/.web.lst; then
             check "$1" "$2"
             # echo "${same[0]}"
+            echo Showing password for $(sed "${same[0]}q;d" "$HERE"/.usr.lst):
             sed "${same[0]}q;d" "$HERE"/.pass.lst
             unset same
         else
@@ -293,9 +297,6 @@ edit() {
             fi;;
     esac
 }
-#
-# FUNCTIONS END
-#
 
 case "$1" in
     init) shift; init "$@";;
@@ -304,6 +305,6 @@ case "$1" in
     edit) shift; edit "$@";;
     -h|--help|*) usage;;
 esac
-[[ -f .web.lst ]] && all e ######### ALWAYS ENCRYPT IN THE END #########
+[[ -f .web.lst ]] && all e
 unset PASS
 exit 0
