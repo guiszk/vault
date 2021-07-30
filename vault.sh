@@ -42,7 +42,7 @@ trap_ctrlc() {
 
 fgpg() {
     # fgpg [d|e] [u|p|w|m]
-    # decode
+    ################ D E C O D E ##############
     if [[ "$1" == "d" ]]; then
         case "$2" in
             u) shift; echo "$PASS$(sed '1q;d' $HERE/.wa.lst | rev)" | gpg --batch --passphrase-fd 0 --output "$HERE"/.usr.lst --decrypt "$HERE"/.usr.enc &>/dev/null && rm "$HERE"/.usr.enc || die "Wrong password.";;
@@ -51,7 +51,7 @@ fgpg() {
             m) shift; echo "$PASS" | gpg --batch --passphrase-fd 0 --output "$HERE"/.wa.lst --decrypt "$HERE"/.wa.enc &>/dev/null && rm "$HERE"/.wa.enc || die "Wrong password.";;
             *) die "Error";;
         esac
-    # encode
+    ################ E N C O D E ##############
     elif [[ "$1" == "e" ]]; then
         case "$2" in
             u) shift; echo "$PASS$(sed '1q;d' $HERE/.wa.lst | rev)" | gpg --batch --passphrase-fd 0 --output "$HERE"/.usr.enc --symmetric --no-symkey-cache --cipher-algo AES256 "$HERE"/.usr.lst &>/dev/null && rm "$HERE"/.usr.lst;;
@@ -98,7 +98,7 @@ domcheck() {
     local match
     [[ -z "$1" ]] && return 1
     #match=$(echo "$1" | grep -E -o "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b")
-    match=$(echo "$1" | grep -E -o "(\.*[a-zA-Z0-9])+(\.[a-zA-Z]{1,4})+\b")
+    match=$(echo "$1" | grep -E -o "(\.*[a-zA-Z0-9-])+(\.[a-zA-Z]{1,4})+\b")
     #echo $match
     if [[ "$1" == "$match" ]]; then
         return 0
@@ -112,7 +112,7 @@ check() {
     #return usernames
     if [[ $# -lt 2 ]]; then
         #if echo "$1" | grep -E -q "[a-zA-Z0-9]+(\.[a-zA-Z]{1,4})+\b"; then
-        if echo "$1" | grep -E -q "(\.*[a-zA-Z0-9])+(\.[a-zA-Z]{1,4})+\b"; then
+        if echo "$1" | grep -E -q "(\.*[a-zA-Z0-9-])+(\.[a-zA-Z0-9-]{1,4})+\b"; then
             ret=$(for i in $(grep -nF "$1" "$HERE"/.web.lst | cut -d : -f 1 | tr '\n' ' '); do sed "${i}q;d" "$HERE"/.usr.lst; done)
         else
         #return domains
@@ -120,7 +120,13 @@ check() {
         fi
     else
         domline=$(grep -nF "$1" "$HERE"/.web.lst | cut -d : -f 1)
-        usrline=$(grep -nF "$2" "$HERE"/.usr.lst | cut -d : -f 1)
+
+        if grep -nx "$2" "$HERE"/.usr.lst; then
+            usrline=$(grep -nx "$2" "$HERE"/.usr.lst | cut -d : -f 1)
+        else
+            usrline=$(grep -nF "$2" "$HERE"/.usr.lst | cut -d : -f 1)
+        fi
+
         dif "$domline" "$usrline"
     fi
 }
@@ -161,7 +167,9 @@ add() {
         echo "$usr" >> "$HERE"/.usr.lst
         echo "$dom" >> "$HERE"/.web.lst
         if [[ $# -eq 2 ]]; then
-            pw=$(pwgen -y -s $((10 + RANDOM % 20)) 1)
+            usronly=$(echo "$usr" | cut -d '@' -f 1)
+            pw=$(python3.9 "$HERE"/passgen.py "$usronly" "$domname")
+            #pw=$(pwgen -y -s $((10 + RANDOM % 20)) 1)
             echo "$pw" | $clipb
             echo "Password copied to clipboard."
         fi
@@ -185,17 +193,42 @@ list() {
             done < <(echo "$ret")
         done < <(sort "$HERE"/.web.lst | uniq)
     elif [[ "$#" -eq 1 ]]; then
+        # list twitter.com
         if grep -Fq "$1" "$HERE"/.web.lst; then
             while IFS= read -r dom; do
                 check "$dom"
+                num=0
                 if [[ -n "$ret" ]]; then
                     echo "${bold}$dom${normal}"
                     while IFS= read -r usr; do
                         echo -e "└─ $usr"
+                        num=$((num + 1))
+                        firstusr="$usr"
                     done < <(echo "$ret")
                 fi
             done < <(grep -F "$1" "$HERE"/.web.lst | sort | uniq)
+            if [[ "$num" -eq 1 ]]; then
+                check "$1" "$firstusr"
+                # echo "${same[0]}"
+                echo Showing password for $(sed "${same[0]}q;d" "$HERE"/.usr.lst):
+                sed "${same[0]}q;d" "$HERE"/.pass.lst
+                unset same
+            else
+                read -r -p "Choose account: " acc
+                if grep -Fq "$acc" "$HERE"/.usr.lst; then
+                    #while ! grep -Fq "$acc" "$HERE"/.web.lst; do
+                #        read -r -p "Choose account: " acc
+            #        done
+                    check "$1" "$acc"
+                    echo Showing password for $(sed "${same[0]}q;d" "$HERE"/.usr.lst):
+                    sed "${same[0]}q;d" "$HERE"/.pass.lst
+                    unset same
+                else
+                    die "Account not found."
+                fi
+            fi
         elif grep -Fq "$1" "$HERE"/.usr.lst; then
+            # list bobburgers123
             while IFS= read -r usr; do
                 check "$usr"
                 if [[ -n "$ret" ]]; then
@@ -297,6 +330,14 @@ edit() {
             fi;;
     esac
 }
+#
+# FUNCTIONS END
+#
+
+#! [ -f "$HERE"/.usr.lst ] && touch "$HERE"/.usr.lst && intro
+#! [ -f "$HERE"/.pass.lst ] && touch "$HERE"/.pass.lst
+#! [ -f "$HERE"/.web.lst ] && touch "$HERE"/.web.lst
+#! [ -f "$HERE"/.wa.lst ] || [ -s "$HERE"/.wa.lst ] && pwgen -y -s $((5 + RANDOM % 7)) 3 | tr " " "\n" > "$HERE"/.wa.lst
 
 case "$1" in
     init) shift; init "$@";;
@@ -305,6 +346,6 @@ case "$1" in
     edit) shift; edit "$@";;
     -h|--help|*) usage;;
 esac
-[[ -f .web.lst ]] && all e
+[[ -f .web.lst ]] && all e ######### ALWAYS ENCRYPT IN THE END #########
 unset PASS
 exit 0
