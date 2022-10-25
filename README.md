@@ -4,6 +4,8 @@ Poorly written BASH password manager.
 
 ## Usage
 
+Uses python to auto-generate passwords, install requirements with `pip install -r requirements.txt`
+
 ```sh
 $ vault.sh init
     # Run when first start.
